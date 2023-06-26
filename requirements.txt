@@ -1,0 +1,8 @@
+transformers==4.27.1
+torch>=2.0
+sentencepiece
+cpm_kernels
+mdtex2html
+accelerate
+protobuf
+gradio
