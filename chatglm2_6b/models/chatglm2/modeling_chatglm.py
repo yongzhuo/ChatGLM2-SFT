@@ -701,7 +701,13 @@ class ChatGLMModel(ChatGLMPreTrainedModel):
         self.output_layer = init_method(nn.Linear, config.hidden_size, config.padded_vocab_size, bias=False,
                                         dtype=config.torch_dtype, **init_kwargs)
         self.gradient_checkpointing = False
+        
+    def get_input_embeddings(self):
+        return self.embedding.word_embeddings
 
+    def set_input_embeddings(self, new_embeddings: torch.Tensor):
+        self.word_embeddings = new_embeddings
+        
     def forward(
             self,
             input_ids,
