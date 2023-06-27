@@ -10,8 +10,9 @@ chatglm2-6b, chatglm-6b微调/LORA/推理
     64791 = {str} '[sMASK]'
     64792 = {str} 'sop'
     64793 = {str} 'eop'
-3. modeling_chatglm.py自带get_masks(), get_position_ids()还是只是支持单个推理, batch形式得自己写;
-4. 不支持gradient_checkpointing, 原因未知;
+3. modeling_chatglm.py自带get_masks()还是只是支持单个推理, batch形式得自己写;
+4. 不支持gradient_checkpointing, 修复的话需要modeling_chatglm.py新增get_input_embeddings, set_input_embeddings;
+5. modeling_chatglm.py中ChatGLMForConditionalGeneration需要加上ChatGLMModel的full_attention_mask(实际使用, 数据预处理传参, 而不是attention_mask)；
 ```
 
 ## 环境配置
