@@ -108,24 +108,19 @@ def prepare_model_for_half_training(model, output_embedding_layer_name="lm_head"
     return model
 def generate_prompt(data_point, is_logger=False):
     # sorry about the formatting disaster gotta move fast
-    # text_1 = f"指令：\n{data_point.get('instruction', '')}\n问：\n{data_point.get('input', '')}\n答：\n" \
-    #     if data_point.get('input', '') else f"指令：\n{data_point.get('instruction', '')}\n答：\n"
-    # text_2 = f"{data_point.get('output', '')}"
-    # text_1 = f"[Round 0]\n\n问：{data_point.get('instruction', '')}{data_point.get('input', '')}\n\n答："
-    text_1 = f"问：{data_point.get('instruction', '')}{data_point.get('input', '')}\n\n答："
+    text_1 = f"[Round 1]\n\n问：{data_point.get('instruction', '')}{data_point.get('input', '')}\n\n答："
+    # text_1 = f"问：{data_point.get('instruction', '')}{data_point.get('input', '')}\n\n答："
     text_2 = f"{data_point.get('output', '')}"
     # end with gMASK, <sop>
-    x = tokenizer.encode(text_1.replace(" ", ""))[2:]
-    y = tokenizer.encode(text_2.replace(" ", ""))[2:]
+    x = tokenizer.encode(text_1.replace(" ", ""))
+    y = tokenizer.encode(text_2.replace(" ", ""))
     if len(x) + len(y) > (MAX_LENGTH_Q + MAX_LENGTH_A):
         x = x[:MAX_LENGTH_Q]
         y = y[:MAX_LENGTH_A]
     if not x:
-        y = [ID_PAD, ID_gMASK, ID_BOS]
-    if x[-1] != ID_BOS:
-        x += [ID_gMASK, ID_BOS]
+        x = [ID_gMASK, ID_BOS, ID_PAD]
     if not y:
-        y = [ID_PAD, ID_EOS]
+        y = [ID_gMASK, ID_BOS, ID_PAD, ID_EOS]
     if y and y[-1] != ID_EOS:
         y += [ID_EOS]
     out = {"input_ids": x, "labels": y}
@@ -162,9 +157,13 @@ def data_collator(batch):
         seq_length = len(seq)
         position_ids = torch.arange(seq_length, dtype=torch.long).unsqueeze(0)
         return position_ids
+
     def get_masks(seq, bos_token_id):
         """  code from model_chatglm.py  """
-        context_length = seq.index(bos_token_id)
+        if seq.count(bos_token_id) == 2:
+            context_length = seq[2:].index(bos_token_id) + 2
+        else:
+            context_length = seq.index(bos_token_id)
         attention_mask = torch.ones((1, len(seq), len(seq)))
         attention_mask.tril_()
         attention_mask[..., :context_length] = 1

@@ -121,102 +121,29 @@ def print_named_parameters(model, use_print_data=True):
         if param.requires_grad:
             trainable_params += num_params
     print(f"trainable params: {trainable_params} || all params: {all_param} || trainable%: {100 * trainable_params / all_param}")
-def generate_prompt(data_point):
+def generate_prompt(data_point, is_logger=False):
     # sorry about the formatting disaster gotta move fast
-    text_1 = f"问：{data_point.get('instruction', '')}{data_point.get('input', '')}\n\n答："
+    text_1 = f"[Round 1]\n\n问：{data_point.get('instruction', '')}{data_point.get('input', '')}\n\n答："
+    # text_1 = f"问：{data_point.get('instruction', '')}{data_point.get('input', '')}\n\n答："
     text_2 = f"{data_point.get('output', '')}"
     # end with gMASK, <sop>
-    x = tokenizer.encode(text_1.replace(" ", ""))[2:]
-    y = tokenizer.encode(text_2.replace(" ", ""))[2:]
+    x = tokenizer.encode(text_1.replace(" ", ""))
+    y = tokenizer.encode(text_2.replace(" ", ""))
     if len(x) + len(y) > (MAX_LENGTH_Q + MAX_LENGTH_A):
         x = x[:MAX_LENGTH_Q]
         y = y[:MAX_LENGTH_A]
     if not x:
-        y = [ID_PAD, ID_gMASK, ID_BOS]
-    if x[-1] != ID_BOS:
-        x += [ID_gMASK, ID_BOS]
+        x = [ID_gMASK, ID_BOS, ID_PAD]
     if not y:
-        y = [ID_PAD, ID_EOS]
+        y = [ID_gMASK, ID_BOS, ID_PAD, ID_EOS]
     if y and y[-1] != ID_EOS:
         y += [ID_EOS]
-    return {"input_ids": x,
-            "labels": y
-            }
-def data_collator(batch):
-    # there's probably a way to do this with the tokenizer settings
-    # def get_position_ids(seq, bos_token_id, gmask=True, position_encoding_2d=True):
-    #     """  code from model_chatglm.py  """
-    #     # context_length = seq.index(bos_token_id) + 1
-    #     context_length = len(seq)
-    #     position_ids = torch.arange(context_length, dtype=torch.long)
-    #     if position_encoding_2d:
-    #         seq_length = seq.index(bos_token_id)
-    #         if not gmask:
-    #             mask_position = seq_length - 1
-    #             position_ids[seq_length:] = mask_position
-    #         block_position_ids = torch.cat((
-    #             torch.zeros(seq_length, dtype=torch.long),
-    #             torch.arange(context_length - seq_length, dtype=torch.long) + 1
-    #         ))
-    #         position_ids = torch.stack((position_ids, block_position_ids), dim=0)
-    #     else:
-    #         if not gmask:
-    #             seq_length = seq.index(bos_token_id)
-    #             mask_position = seq_length - 1
-    #             position_ids[context_length - 1:] = mask_position
-    #     # position_ids = position_ids.unsqueeze(0)
-    #     return position_ids
-    def get_position_ids(seq, bos_token_id):
-        seq_length = len(seq)
-        position_ids = torch.arange(seq_length, dtype=torch.long).unsqueeze(0)
-        return position_ids
-    def get_masks(seq, bos_token_id):
-        """  code from model_chatglm.py  """
-        context_length = seq.index(bos_token_id)
-        attention_mask = torch.ones((1, len(seq), len(seq)))
-        attention_mask.tril_()
-        attention_mask[..., :context_length] = 1
-        # attention_mask.unsqueeze_(1)
-        attention_mask = (attention_mask < 0.5).bool()
-        return attention_mask[0]
-
-    len_max_batch = [len(batch[i].get("input_ids")) + len(batch[i].get("labels")) + 1
-                     for i in range(len(batch))]
-    len_max_batch = min(MAX_LENGTH_QA, max(len_max_batch))
-    batch_attention_mask = []
-    batch_position_ids = []
-    batch_input_ids = []
-    batch_labels = []
-    for ba in batch:
-        x, y = ba.get("input_ids"), ba.get("labels")
-        len_padding = len_max_batch - len(x) - len(y)
-        if tokenizer.padding_side and tokenizer.padding_side == "left":
-            labels = [-100] * len_padding + [-100] * len(x) + y
-            input_ids = [ID_PAD] * (len_padding) + x + y
-        else:
-            labels = [-100] * len(x) + y + [-100] * len_padding
-            input_ids = x + y + [ID_PAD] * (len_padding)
-        tensor_position_ids = get_position_ids(input_ids, ID_BOS)
-        tensor_input_ids = torch.tensor(input_ids, dtype=torch.long)
-        tensor_labels = torch.tensor(labels, dtype=torch.long)
-        tensor_attention_mask = get_masks(input_ids, ID_BOS)
-        batch_attention_mask.append(tensor_attention_mask)
-        batch_position_ids.append(tensor_position_ids)
-        batch_input_ids.append(tensor_input_ids)
-        batch_labels.append(tensor_labels)
-    # print(batch_attention_mask)
-    batch_attention_mask = torch.stack(batch_attention_mask)
-    batch_position_ids = torch.stack(batch_position_ids)
-    batch_input_ids = torch.stack(batch_input_ids)
-    batch_labels = torch.stack(batch_labels)
-    input_dict = {
-                 # "full_attention_mask": copy.deepcopy(batch_attention_mask),
-                  "attention_mask": batch_attention_mask,
-                  "position_ids": batch_position_ids,
-                  "input_ids": batch_input_ids,
-                  "labels": batch_labels,
-                  }
-    return input_dict
+    out = {"input_ids": x, "labels": y}
+    if is_logger:
+        print(text_1)
+        print(text_2)
+        print(out)
+    return out
 
 
 tokenizer = ChatGLMTokenizer.from_pretrained(PATH_MODEL_PRETRAIN)
@@ -283,6 +210,11 @@ def predict(data_dict):
     print(input_ids)
     print(output)
     # output = output.split("答：")[-1]
+    return output
+
+def predict_2(data_point):
+    text = f"{data_point.get('instruction', '')}{data_point.get('input', '')}"
+    output = model.chat(tokenizer, text)
     return output
 
 

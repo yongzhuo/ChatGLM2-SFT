@@ -16,6 +16,23 @@ chatglm2-6b, chatglm-6b微调/LORA/推理
 5. modeling_chatglm.py中的ChatGLMForConditionalGeneration类forward函数中的
       if full_attention_mask is None:  前加入  batch_size, seq_length = input_ids.shape
 6. get_mask(), 一直以来都对chatglm的mask/position有一些疑惑;
+    def get_masks(seq, bos_token_id):
+        """  code from model_chatglm.py  """
+        if seq.count(bos_token_id) == 2:
+            context_length = seq[2:].index(bos_token_id) + 2
+        else:
+            context_length = seq.index(bos_token_id)
+        attention_mask = torch.ones((1, len(seq), len(seq)))
+        attention_mask.tril_()
+        attention_mask[..., :context_length] = 1
+        # attention_mask.unsqueeze_(1)
+        attention_mask = (attention_mask < 0.5).bool()
+        return attention_mask
+7. 严格按照官方prompt构建输入输出:
+    输入："[Round 1]\n\n问：{}\n\n答："
+    输出："{}"
+    输入id: [gMASK, BOS, 输入tokens]
+    输出id: [gMASK, BOS, 输出tokens, EOS]
 ```
 
 ## 环境配置
@@ -40,6 +57,17 @@ gradio
 验证: python evaluation.py
 接口: python post_api.py
 ```
+
+## 实验日志
+### 微调日志(alpaca_gpt4forall)
+
+![chatglm2_6b/loss_gpt4forall_alpaca.png](chatglm2_6b/loss_gpt4forall_alpaca.png)
+
+### 推理样例(LoRA, R=8)
+
+![chatglm2_6b/predict_sample_1.png](chatglm2_6b/predict_sample_1.png)
+
+![chatglm2_6b/predict_sample_2.png](chatglm2_6b/predict_sample_2.png)
 
 
 ## 参考/感谢
