@@ -6,14 +6,16 @@
 
 
 import random
+import copy
 import time
 import sys
 import os
 path_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 print(path_root)
 sys.path.append(path_root)
-from chatglm2_6b.ft_chatglm.config import CUDA_VISIBLE_DEVICES, USE_TORCH, CPU_NUMS  # from config
+from chatglm2_6b.ft_chatglm2.config import CUDA_VISIBLE_DEVICES, USE_TORCH, CPU_NUMS  # from config
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:3072"
+CUDA_VISIBLE_DEVICES = "-1"
 os.environ["CUDA_VISIBLE_DEVICES"] = CUDA_VISIBLE_DEVICES
 os.environ["USE_TORCH"] = USE_TORCH
 os.environ["OMP_NUM_THREADS"] = CPU_NUMS  # export OMP_NUM_THREADS=1
@@ -28,14 +30,14 @@ import torch
 
 # from transformers import ChatGLMForConditionalGeneration, ChatGLMConfig
 # from transformers import ChatGLMTokenizer
-from chatglm2_6b.models.chatglm.modeling_chatglm import ChatGLMForConditionalGeneration, ChatGLMConfig
-from chatglm2_6b.models.chatglm.tokenization_chatglm import ChatGLMTokenizer
-from chatglm2_6b.ft_chatglm.config import PATH_MODEL_PRETRAIN, DATA_PATH, MODEL_SAVE_DIR, REPO_ID
-from chatglm2_6b.ft_chatglm.config import MICRO_BATCH_SIZE, BATCH_SIZE, GRADIENT_ACCUMULATION_STEPS
-from chatglm2_6b.ft_chatglm.config import LEARNING_RATE, EPOCHS, SAVE_STEPS, VAL_SET_SIZE, TARGET_MODULES
-from chatglm2_6b.ft_chatglm.config import MAX_LENGTH_Q, MAX_LENGTH_A, MAX_LENGTH_QA
-from chatglm2_6b.ft_chatglm.config import LORA_DROPOUT, LORA_ALPHA, LORA_R
-from chatglm2_6b.ft_chatglm.config import USE_CUDA
+from chatglm2_6b.models.chatglm2.modeling_chatglm import ChatGLMForConditionalGeneration, ChatGLMConfig
+from chatglm2_6b.models.chatglm2.tokenization_chatglm import ChatGLMTokenizer
+from chatglm2_6b.ft_chatglm2.config import PATH_MODEL_PRETRAIN, DATA_PATH, MODEL_SAVE_DIR, REPO_ID
+from chatglm2_6b.ft_chatglm2.config import MICRO_BATCH_SIZE, BATCH_SIZE, GRADIENT_ACCUMULATION_STEPS
+from chatglm2_6b.ft_chatglm2.config import LEARNING_RATE, EPOCHS, SAVE_STEPS, VAL_SET_SIZE, TARGET_MODULES
+from chatglm2_6b.ft_chatglm2.config import MAX_LENGTH_Q, MAX_LENGTH_A, MAX_LENGTH_QA
+from chatglm2_6b.ft_chatglm2.config import LORA_DROPOUT, LORA_ALPHA, LORA_R
+from chatglm2_6b.ft_chatglm2.config import USE_CUDA
 
 
 def load_model_state(model, model_save_dir="./", model_name="adapter_model.bin", device="cpu"):
@@ -121,7 +123,7 @@ def print_named_parameters(model, use_print_data=True):
     print(f"trainable params: {trainable_params} || all params: {all_param} || trainable%: {100 * trainable_params / all_param}")
 def generate_prompt(data_point):
     # sorry about the formatting disaster gotta move fast
-    text_1 = f"问：{data_point.get('instruction', '')}{data_point.get('input', '')}\n答："
+    text_1 = f"问：{data_point.get('instruction', '')}{data_point.get('input', '')}\n\n答："
     text_2 = f"{data_point.get('output', '')}"
     # end with gMASK, <sop>
     x = tokenizer.encode(text_1.replace(" ", ""))[2:]
@@ -138,17 +140,92 @@ def generate_prompt(data_point):
     if y and y[-1] != ID_EOS:
         y += [ID_EOS]
     return {"input_ids": x,
-            "labels": y}
+            "labels": y
+            }
+def data_collator(batch):
+    # there's probably a way to do this with the tokenizer settings
+    # def get_position_ids(seq, bos_token_id, gmask=True, position_encoding_2d=True):
+    #     """  code from model_chatglm.py  """
+    #     # context_length = seq.index(bos_token_id) + 1
+    #     context_length = len(seq)
+    #     position_ids = torch.arange(context_length, dtype=torch.long)
+    #     if position_encoding_2d:
+    #         seq_length = seq.index(bos_token_id)
+    #         if not gmask:
+    #             mask_position = seq_length - 1
+    #             position_ids[seq_length:] = mask_position
+    #         block_position_ids = torch.cat((
+    #             torch.zeros(seq_length, dtype=torch.long),
+    #             torch.arange(context_length - seq_length, dtype=torch.long) + 1
+    #         ))
+    #         position_ids = torch.stack((position_ids, block_position_ids), dim=0)
+    #     else:
+    #         if not gmask:
+    #             seq_length = seq.index(bos_token_id)
+    #             mask_position = seq_length - 1
+    #             position_ids[context_length - 1:] = mask_position
+    #     # position_ids = position_ids.unsqueeze(0)
+    #     return position_ids
+    def get_position_ids(seq, bos_token_id):
+        seq_length = len(seq)
+        position_ids = torch.arange(seq_length, dtype=torch.long).unsqueeze(0)
+        return position_ids
+    def get_masks(seq, bos_token_id):
+        """  code from model_chatglm.py  """
+        context_length = seq.index(bos_token_id)
+        attention_mask = torch.ones((1, len(seq), len(seq)))
+        attention_mask.tril_()
+        attention_mask[..., :context_length] = 1
+        # attention_mask.unsqueeze_(1)
+        attention_mask = (attention_mask < 0.5).bool()
+        return attention_mask[0]
+
+    len_max_batch = [len(batch[i].get("input_ids")) + len(batch[i].get("labels")) + 1
+                     for i in range(len(batch))]
+    len_max_batch = min(MAX_LENGTH_QA, max(len_max_batch))
+    batch_attention_mask = []
+    batch_position_ids = []
+    batch_input_ids = []
+    batch_labels = []
+    for ba in batch:
+        x, y = ba.get("input_ids"), ba.get("labels")
+        len_padding = len_max_batch - len(x) - len(y)
+        if tokenizer.padding_side and tokenizer.padding_side == "left":
+            labels = [-100] * len_padding + [-100] * len(x) + y
+            input_ids = [ID_PAD] * (len_padding) + x + y
+        else:
+            labels = [-100] * len(x) + y + [-100] * len_padding
+            input_ids = x + y + [ID_PAD] * (len_padding)
+        tensor_position_ids = get_position_ids(input_ids, ID_BOS)
+        tensor_input_ids = torch.tensor(input_ids, dtype=torch.long)
+        tensor_labels = torch.tensor(labels, dtype=torch.long)
+        tensor_attention_mask = get_masks(input_ids, ID_BOS)
+        batch_attention_mask.append(tensor_attention_mask)
+        batch_position_ids.append(tensor_position_ids)
+        batch_input_ids.append(tensor_input_ids)
+        batch_labels.append(tensor_labels)
+    # print(batch_attention_mask)
+    batch_attention_mask = torch.stack(batch_attention_mask)
+    batch_position_ids = torch.stack(batch_position_ids)
+    batch_input_ids = torch.stack(batch_input_ids)
+    batch_labels = torch.stack(batch_labels)
+    input_dict = {
+                 # "full_attention_mask": copy.deepcopy(batch_attention_mask),
+                  "attention_mask": batch_attention_mask,
+                  "position_ids": batch_position_ids,
+                  "input_ids": batch_input_ids,
+                  "labels": batch_labels,
+                  }
+    return input_dict
 
 
 tokenizer = ChatGLMTokenizer.from_pretrained(PATH_MODEL_PRETRAIN)
-# tokenizer.pad_token = tokenizer.eos_token
 tokenizer.padding_side = "left"  # Allow batched inference
 ID_gMASK = 64790
 ID_BOS = 64792
 ID_EOS = 64793
 ID_MASK = 64789
-ID_PAD = 2
+ID_PAD = 0
 model = ChatGLMForConditionalGeneration.from_pretrained(PATH_MODEL_PRETRAIN)
 print("load ChatGLMForConditionalGeneration ok")
 model = load_model_state(model=model, model_save_dir=MODEL_SAVE_DIR)
@@ -176,14 +253,20 @@ def predict(data_dict):
     input_ids = torch.tensor([input_ids], dtype=torch.long)
     if USE_CUDA:
         input_ids = input_ids.cuda()
+    # input_dict = data_collator([prompt_dict])
+    # if USE_CUDA:
+    #     input_dict = {k:v.cuda() for k,v in input_dict.items()}
+    # print(input_dict)
     generation_config = GenerationConfig(
-        temperature=0.95,
-        top_p=0.75,
+        temperature=0.8,
+        top_p=0.8,
         top_k=50,
         num_beams=1,
         do_sample=True,
         penalty_alpha=1.0,
         max_new_tokens=512,
+        pad_token_id=ID_PAD,
+        eos_token_id=ID_EOS,
     )
     with torch.no_grad():
         generation_output = model.generate(
@@ -192,6 +275,7 @@ def predict(data_dict):
             return_dict_in_generate=True,
             output_scores=True,
             # max_new_tokens=512,
+            # **input_dict
         )
     s = generation_output.sequences[0]
     output = tokenizer.decode(s)

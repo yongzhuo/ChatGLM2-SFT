@@ -111,8 +111,8 @@ def generate_prompt(data_point, is_logger=False):
     # text_1 = f"指令：\n{data_point.get('instruction', '')}\n问：\n{data_point.get('input', '')}\n答：\n" \
     #     if data_point.get('input', '') else f"指令：\n{data_point.get('instruction', '')}\n答：\n"
     # text_2 = f"{data_point.get('output', '')}"
-
-    text_1 = f"问：{data_point.get('instruction', '')}{data_point.get('input', '')}\n答："
+    # text_1 = f"[Round 0]\n\n问：{data_point.get('instruction', '')}{data_point.get('input', '')}\n\n答："
+    text_1 = f"问：{data_point.get('instruction', '')}{data_point.get('input', '')}\n\n答："
     text_2 = f"{data_point.get('output', '')}"
     # end with gMASK, <sop>
     x = tokenizer.encode(text_1.replace(" ", ""))[2:]
@@ -201,7 +201,8 @@ def data_collator(batch):
     batch_position_ids = torch.stack(batch_position_ids)
     batch_input_ids = torch.stack(batch_input_ids)
     batch_labels = torch.stack(batch_labels)
-    input_dict = { "full_attention_mask": copy.deepcopy(batch_attention_mask),
+    input_dict = {
+                  "full_attention_mask": copy.deepcopy(batch_attention_mask),
                   "attention_mask": batch_attention_mask,
                   "position_ids": batch_position_ids,
                   "input_ids": batch_input_ids,
@@ -233,21 +234,21 @@ ID_gMASK = 64790
 ID_BOS = 64792
 ID_EOS = 64793
 ID_MASK = 64789
-ID_PAD = 2
+ID_PAD = 0
 model = ChatGLMForConditionalGeneration.from_pretrained(PATH_MODEL_PRETRAIN)
 model = prepare_model_for_half_training(model,
-        use_gradient_checkpointing=False,
+        use_gradient_checkpointing=True,
         output_embedding_layer_name="lm_head",
         layer_norm_names=["post_attention_layernorm",
                           "final_layernorm",
                           "input_layernorm",
                           ],
         )
-# model.gradient_checkpointing_enable()
-# model.enable_input_require_grads()
-# model.is_parallelizable = IS_PARALLELIZABLE
-# model.model_parallel = MODEL_PARALLEL
-# model.config.use_cache = USE_CACHE
+model.gradient_checkpointing_enable()
+model.enable_input_require_grads()
+model.is_parallelizable = IS_PARALLELIZABLE
+model.model_parallel = MODEL_PARALLEL
+model.config.use_cache = USE_CACHE
 config = LoraConfig(target_modules=TARGET_MODULES,
                     lora_dropout=LORA_DROPOUT,
                     lora_alpha=LORA_ALPHA,

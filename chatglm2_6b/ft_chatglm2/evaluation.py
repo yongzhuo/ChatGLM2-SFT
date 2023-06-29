@@ -17,7 +17,7 @@ import os
 path_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 print(path_root)
 sys.path.append(path_root)
-from chatglm2_6b.ft_chatglm.config import CUDA_VISIBLE_DEVICES, USE_TORCH, CPU_NUMS  # from config
+from chatglm2_6b.ft_chatglm2.config import CUDA_VISIBLE_DEVICES, USE_TORCH, CPU_NUMS  # from config
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:3072"
 os.environ["CUDA_VISIBLE_DEVICES"] = CUDA_VISIBLE_DEVICES
 os.environ["USE_TORCH"] = USE_TORCH
@@ -38,14 +38,14 @@ import torch
 
 # from transformers import ChatGLMForConditionalGeneration, ChatGLMConfig
 # from transformers import ChatGLMTokenizer
-from chatglm2_6b.models.chatglm.modeling_chatglm import ChatGLMForConditionalGeneration, ChatGLMConfig
-from chatglm2_6b.models.chatglm.tokenization_chatglm import ChatGLMTokenizer
-from chatglm2_6b.ft_chatglm.config import PATH_MODEL_PRETRAIN, DATA_PATH, MODEL_SAVE_DIR, REPO_ID
-from chatglm2_6b.ft_chatglm.config import MICRO_BATCH_SIZE, BATCH_SIZE, GRADIENT_ACCUMULATION_STEPS
-from chatglm2_6b.ft_chatglm.config import LEARNING_RATE, EPOCHS, SAVE_STEPS, VAL_SET_SIZE, TARGET_MODULES
-from chatglm2_6b.ft_chatglm.config import MAX_LENGTH_Q, MAX_LENGTH_A, MAX_LENGTH_QA
-from chatglm2_6b.ft_chatglm.config import LORA_DROPOUT, LORA_ALPHA, LORA_R
-from chatglm2_6b.ft_chatglm.config import USE_CUDA
+from chatglm2_6b.models.chatglm2.modeling_chatglm import ChatGLMForConditionalGeneration, ChatGLMConfig
+from chatglm2_6b.models.chatglm2.tokenization_chatglm import ChatGLMTokenizer
+from chatglm2_6b.ft_chatglm2.config import PATH_MODEL_PRETRAIN, DATA_PATH, MODEL_SAVE_DIR, REPO_ID
+from chatglm2_6b.ft_chatglm2.config import MICRO_BATCH_SIZE, BATCH_SIZE, GRADIENT_ACCUMULATION_STEPS
+from chatglm2_6b.ft_chatglm2.config import LEARNING_RATE, EPOCHS, SAVE_STEPS, VAL_SET_SIZE, TARGET_MODULES
+from chatglm2_6b.ft_chatglm2.config import MAX_LENGTH_Q, MAX_LENGTH_A, MAX_LENGTH_QA
+from chatglm2_6b.ft_chatglm2.config import LORA_DROPOUT, LORA_ALPHA, LORA_R
+from chatglm2_6b.ft_chatglm2.config import USE_CUDA
 
 
 def save_model_state(model, config=None, model_save_dir="./", model_name="adapter_model.bin"):
@@ -145,7 +145,7 @@ def load_json(path: str, encoding: str="utf-8"):
     return model_json
 def generate_prompt(data_point):
     """  构建prompt   """
-    text_1 = f"问：{data_point.get('instruction', '')}{data_point.get('input', '')}\n答："
+    text_1 = f"问：{data_point.get('instruction', '')}{data_point.get('input', '')}\n\n答："
     text_2 = f"{data_point.get('output', '')}"
     # end with gMASK, <sop>
     x = tokenizer.encode(text_1.replace(" ", ""))[2:]
@@ -178,7 +178,7 @@ def data_collator(batch):
         attention_mask[..., :context_length] = 1
         # attention_mask.unsqueeze_(1)
         attention_mask = (attention_mask < 0.5).bool()
-        return attention_mask
+        return attention_mask[0]
 
     len_max_batch = [len(batch[i].get("input_ids")) + len(batch[i].get("labels")) + 1
                      for i in range(len(batch))]
@@ -225,7 +225,7 @@ ID_gMASK = 64790
 ID_BOS = 64792
 ID_EOS = 64793
 ID_MASK = 64789
-ID_PAD = 2
+ID_PAD = 0
 model = ChatGLMForConditionalGeneration.from_pretrained(PATH_MODEL_PRETRAIN)
 # model.gradient_checkpointing_enable()
 # model.enable_input_require_grads()
@@ -324,13 +324,13 @@ def text_generate(request_data):
     return response
 class Item(BaseModel):
     instruction: str = "完成下面的问答"
-    text: str = ""
+    text: str = "1+1="
     penalty_alpha: float = 1.0
-    max_new_tokens: int = 512
-    temperature: float = 0.95  # 0.95  # 0.35  # 0.95
+    max_new_tokens: int = 128
+    temperature: float = 0.8  # 0.95  # 0.35  # 0.95
     do_sample: bool = True
     num_beams: int = 1
-    top_p: float = 0.7  # 0.75
+    top_p: float = 0.8  # 0.75
     top_k: int = 50
 
 

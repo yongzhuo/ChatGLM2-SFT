@@ -634,7 +634,9 @@ class ChatGLMPreTrainedModel(PreTrainedModel):
         if padding_mask is not None:
             full_attention_mask = full_attention_mask * padding_mask.unsqueeze(1)
         if not past_length and padding_mask is not None:
-            full_attention_mask -= padding_mask.unsqueeze(-1) - 1
+            full_attention_mask = full_attention_mask.long() - padding_mask.unsqueeze(-1).long() - 1
+            # full_attention_mask = full_attention_mask - padding_mask.unsqueeze(-1) - 1
+            # full_attention_mask = ~(padding_mask.unsqueeze(-1).long() + 1 + ~full_attention_mask.long())
         full_attention_mask = (full_attention_mask < 0.5).bool()
         full_attention_mask.unsqueeze_(1)
         return full_attention_mask
@@ -831,6 +833,12 @@ class ChatGLMForConditionalGeneration(ChatGLMPreTrainedModel):
             "return_last_logit": True
         }
 
+    # def get_input_embeddings(self):
+    #     return self.embedding.word_embeddings
+    #
+    # def set_input_embeddings(self, new_embeddings: torch.Tensor):
+    #     self.word_embeddings = new_embeddings
+
     def forward(
             self,
             input_ids: Optional[torch.Tensor] = None,
@@ -848,7 +856,7 @@ class ChatGLMForConditionalGeneration(ChatGLMPreTrainedModel):
     ):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
+        batch_size, seq_length = input_ids.shape
         if full_attention_mask is None:
             if (attention_mask is not None and not attention_mask.all()) or (past_key_values and seq_length != 1):
                 full_attention_mask = self.get_masks(input_ids, past_key_values, padding_mask=attention_mask)
