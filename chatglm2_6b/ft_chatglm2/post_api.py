@@ -185,11 +185,19 @@ def generate_prompt(data_point, is_logger=False):
 tokenizer = ChatGLMTokenizer.from_pretrained(PATH_MODEL_PRETRAIN)
 # tokenizer.pad_token = tokenizer.eos_token
 tokenizer.padding_side = "left"  # Allow batched inference
-ID_gMASK = 64790
-ID_BOS = 64792
-ID_EOS = 64793
+# ID_gMASK = 64790
+# ID_BOS = 64792
+# ID_EOS = 64793
+# ID_MASK = 64789
+# ID_PAD = 2
 ID_MASK = 64789
-ID_PAD = 2
+ID_gMASK = 64790
+ID_sMASK = 64791
+ID_SOP = 64792
+ID_EOP = 64793
+ID_BOS = 1
+ID_EOS = 2
+ID_PAD = 0
 model = ChatGLMForConditionalGeneration.from_pretrained(PATH_MODEL_PRETRAIN)
 # model.gradient_checkpointing_enable()
 # model.enable_input_require_grads()

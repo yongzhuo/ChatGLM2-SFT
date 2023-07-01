@@ -118,9 +118,11 @@ def generate_prompt(data_point, is_logger=False):
         x = x[:MAX_LENGTH_Q]
         y = y[:MAX_LENGTH_A]
     if not x:
-        x = [ID_gMASK, ID_BOS, ID_PAD]
+        x = [ID_gMASK, ID_SOP, ID_PAD]
+    # if x and x[-1] != ID_BOS:
+    #     x += [ID_BOS]
     if not y:
-        y = [ID_gMASK, ID_BOS, ID_PAD, ID_EOS]
+        y = [ID_gMASK, ID_SOP, ID_PAD, ID_EOS]
     if y and y[-1] != ID_EOS:
         y += [ID_EOS]
     out = {"input_ids": x, "labels": y}
@@ -229,11 +231,21 @@ def dfs_file(path_dir):
 tokenizer = ChatGLMTokenizer.from_pretrained(PATH_MODEL_PRETRAIN)
 # tokenizer.pad_token = tokenizer.eos_token
 tokenizer.padding_side = "left"  # Allow batched inference
-ID_gMASK = 64790
-ID_BOS = 64792
-ID_EOS = 64793
+# tokenizer.padding_side = "right"  # Allow batched inference
+# ID_gMASK = 64790
+# ID_BOS = 64792
+# ID_EOS = 64793
+# ID_MASK = 64789
+# ID_PAD = 2
 ID_MASK = 64789
+ID_gMASK = 64790
+ID_sMASK = 64791
+ID_SOP = 64792
+ID_EOP = 64793
+ID_BOS = 1
+ID_EOS = 2
 ID_PAD = 0
+
 model = ChatGLMForConditionalGeneration.from_pretrained(PATH_MODEL_PRETRAIN)
 model = prepare_model_for_half_training(model,
         use_gradient_checkpointing=True,
@@ -274,7 +286,6 @@ tensorboardx_witer = SummaryWriter(logdir=MODEL_SAVE_DIR)
 # ID_UNK = 0
 # ID_CLS = 1
 # ID_SEP = 2
-# ID_PAD = 2  #
 
 ### 包含训练集, 验证集. DATA_PATH_TRAIN, DATA_PATH_DEV
 # data_dev = load_dataset("json", data_files=DATA_PATH_DEV)
@@ -369,6 +380,7 @@ print_named_parameters(model, use_print_data=True)  # 查看LoRA层权重是不�
 # tail -n 1000  -f tc.train.py.log
 # |myz|
 
+
 """log
 trainable params: 1949696 || all params: 6245533696 || trainable%: 0.031217444255383614
 100%|██████████| 1/1 [00:00<00:00, 624.34it/s]
@@ -390,5 +402,5 @@ trainable params: 1949696 || all params: 6245533696 || trainable%: 0.03121744425
 ......
 {'train_runtime': 14.4812, 'train_samples_per_second': 7.251, 'train_steps_per_second': 0.207, 'train_loss': 1.6315104166666667, 'epoch': 3.0}
 ******model_save_path is model_sft/adapter_model.bin******
-
 """
+

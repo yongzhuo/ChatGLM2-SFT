@@ -148,10 +148,18 @@ def generate_prompt(data_point, is_logger=False):
 
 tokenizer = ChatGLMTokenizer.from_pretrained(PATH_MODEL_PRETRAIN)
 tokenizer.padding_side = "left"  # Allow batched inference
-ID_gMASK = 64790
-ID_BOS = 64792
-ID_EOS = 64793
+# ID_gMASK = 64790
+# ID_BOS = 64792
+# ID_EOS = 64793
+# ID_MASK = 64789
+# ID_PAD = 0
 ID_MASK = 64789
+ID_gMASK = 64790
+ID_sMASK = 64791
+ID_SOP = 64792
+ID_EOP = 64793
+ID_BOS = 1
+ID_EOS = 2
 ID_PAD = 0
 model = ChatGLMForConditionalGeneration.from_pretrained(PATH_MODEL_PRETRAIN)
 print("load ChatGLMForConditionalGeneration ok")
