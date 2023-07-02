@@ -108,8 +108,11 @@ def prepare_model_for_half_training(model, output_embedding_layer_name="lm_head"
     return model
 def generate_prompt(data_point, is_logger=False):
     # sorry about the formatting disaster gotta move fast
+    # text_1 = f"指令：\n{data_point.get('instruction', '')}\n问：\n{data_point.get('input', '')}\n答：\n" \
+    #     if data_point.get('input', '') else f"指令：\n{data_point.get('instruction', '')}\n答：\n"
+    # text_2 = f"{data_point.get('output', '')}"
+
     text_1 = f"[Round 1]\n\n问：{data_point.get('instruction', '')}{data_point.get('input', '')}\n\n答："
-    # text_1 = f"问：{data_point.get('instruction', '')}{data_point.get('input', '')}\n\n答："
     text_2 = f"{data_point.get('output', '')}"
     # end with gMASK, <sop>
     x = tokenizer.encode(text_1.replace(" ", ""))
@@ -118,9 +121,9 @@ def generate_prompt(data_point, is_logger=False):
         x = x[:MAX_LENGTH_Q]
         y = y[:MAX_LENGTH_A]
     if not x:
-        x = [ID_gMASK, ID_SOP, ID_PAD]
-    # if x and x[-1] != ID_BOS:
-    #     x += [ID_BOS]
+        x = [ID_gMASK, ID_SOP, ID_PAD, ID_BOS]
+    if x[-1] != ID_BOS:
+        x += [ID_BOS]
     if not y:
         y = [ID_gMASK, ID_SOP, ID_PAD, ID_EOS]
     if y and y[-1] != ID_EOS:
@@ -159,7 +162,6 @@ def data_collator(batch):
         seq_length = len(seq)
         position_ids = torch.arange(seq_length, dtype=torch.long).unsqueeze(0)
         return position_ids
-
     def get_masks(seq, bos_token_id):
         """  code from model_chatglm.py  """
         if seq.count(bos_token_id) == 2:
@@ -202,8 +204,7 @@ def data_collator(batch):
     batch_position_ids = torch.stack(batch_position_ids)
     batch_input_ids = torch.stack(batch_input_ids)
     batch_labels = torch.stack(batch_labels)
-    input_dict = {
-                  "full_attention_mask": copy.deepcopy(batch_attention_mask),
+    input_dict = { "full_attention_mask": copy.deepcopy(batch_attention_mask),
                   "attention_mask": batch_attention_mask,
                   "position_ids": batch_position_ids,
                   "input_ids": batch_input_ids,
@@ -380,7 +381,6 @@ print_named_parameters(model, use_print_data=True)  # 查看LoRA层权重是不�
 # tail -n 1000  -f tc.train.py.log
 # |myz|
 
-
 """log
 trainable params: 1949696 || all params: 6245533696 || trainable%: 0.031217444255383614
 100%|██████████| 1/1 [00:00<00:00, 624.34it/s]
@@ -402,5 +402,5 @@ trainable params: 1949696 || all params: 6245533696 || trainable%: 0.03121744425
 ......
 {'train_runtime': 14.4812, 'train_samples_per_second': 7.251, 'train_steps_per_second': 0.207, 'train_loss': 1.6315104166666667, 'epoch': 3.0}
 ******model_save_path is model_sft/adapter_model.bin******
-"""
 
+"""

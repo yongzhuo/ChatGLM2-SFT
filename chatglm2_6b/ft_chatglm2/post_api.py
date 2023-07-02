@@ -169,9 +169,11 @@ def generate_prompt(data_point, is_logger=False):
         x = x[:MAX_LENGTH_Q]
         y = y[:MAX_LENGTH_A]
     if not x:
-        x = [ID_gMASK, ID_BOS, ID_PAD]
+        x = [ID_gMASK, ID_SOP, ID_PAD, ID_BOS]
+    if x[-1] != ID_BOS:
+        x += [ID_BOS]
     if not y:
-        y = [ID_gMASK, ID_BOS, ID_PAD, ID_EOS]
+        y = [ID_gMASK, ID_SOP, ID_PAD, ID_EOS]
     if y and y[-1] != ID_EOS:
         y += [ID_EOS]
     out = {"input_ids": x, "labels": y}
