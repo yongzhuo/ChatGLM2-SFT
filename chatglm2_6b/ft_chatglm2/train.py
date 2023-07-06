@@ -112,20 +112,23 @@ def generate_prompt(data_point, is_logger=False):
     #     if data_point.get('input', '') else f"指令：\n{data_point.get('instruction', '')}\n答：\n"
     # text_2 = f"{data_point.get('output', '')}"
 
+    # [Round {}]\n\n必须
     text_1 = f"[Round 1]\n\n问：{data_point.get('instruction', '')}{data_point.get('input', '')}\n\n答："
     text_2 = f"{data_point.get('output', '')}"
     # end with gMASK, <sop>
     x = tokenizer.encode(text_1.replace(" ", ""))
     y = tokenizer.encode(text_2.replace(" ", ""))
+    if y and y[-1] == ID_gMASK:  # 如果以gMASK, <sop>开头则剔除(防止以后改了)
+        y = y[2:]
     if len(x) + len(y) > (MAX_LENGTH_Q + MAX_LENGTH_A):
         x = x[:MAX_LENGTH_Q]
         y = y[:MAX_LENGTH_A]
     if not x:
-        x = [ID_gMASK, ID_SOP, ID_PAD, ID_BOS]
-    if x[-1] != ID_BOS:
-        x += [ID_BOS]
+        y = [ID_PAD, ID_gMASK, ID_SOP]
+    if x[-1] != ID_SOP:
+        x += [ID_gMASK, ID_SOP]
     if not y:
-        y = [ID_gMASK, ID_SOP, ID_PAD, ID_EOS]
+        y = [ID_PAD, ID_EOS]
     if y and y[-1] != ID_EOS:
         y += [ID_EOS]
     out = {"input_ids": x, "labels": y}
@@ -191,10 +194,10 @@ def data_collator(batch):
         else:
             labels = [-100] * len(x) + y + [-100] * len_padding
             input_ids = x + y + [ID_PAD] * (len_padding)
-        tensor_position_ids = get_position_ids(input_ids, ID_BOS)
+        tensor_position_ids = get_position_ids(input_ids, bos_token_id=ID_SOP)
+        tensor_attention_mask = get_masks(input_ids, bos_token_id=ID_SOP)
         tensor_input_ids = torch.tensor(input_ids, dtype=torch.long)
         tensor_labels = torch.tensor(labels, dtype=torch.long)
-        tensor_attention_mask = get_masks(input_ids, ID_BOS)
         batch_attention_mask.append(tensor_attention_mask)
         batch_position_ids.append(tensor_position_ids)
         batch_input_ids.append(tensor_input_ids)

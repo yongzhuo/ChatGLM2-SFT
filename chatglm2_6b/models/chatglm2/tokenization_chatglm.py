@@ -250,73 +250,6 @@ def save_json(jsons, json_path, indent=4):
         fj.write(json.dumps(jsons, ensure_ascii=False, indent=indent))
     fj.close()
 
-import torch
-
-
-def get_position_ids_2(seq, bos_token_id, gmask=False, position_encoding_2d=False):
-    """  code from model_chatglm.py  """
-    # context_length = seq.index(bos_token_id) + 1
-    context_length = len(seq)
-    position_ids = torch.arange(context_length, dtype=torch.long)
-    if position_encoding_2d:
-        seq_length = seq.index(bos_token_id)
-        if not gmask:
-            mask_position = seq_length - 1
-            position_ids[seq_length:] = mask_position
-        block_position_ids = torch.cat((
-            torch.zeros(seq_length, dtype=torch.long),
-            torch.arange(context_length - seq_length, dtype=torch.long) + 1
-        ))
-        position_ids = torch.stack((position_ids, block_position_ids), dim=0)
-    else:
-        if not gmask:
-            seq_length = seq.index(bos_token_id)
-            mask_position = seq_length - 1
-            position_ids[context_length - 1:] = mask_position
-    # position_ids = position_ids.unsqueeze(0)
-    return position_ids
-def get_masks_2(input_ids, past_key_values, padding_mask=None):
-    batch_size, seq_length = input_ids.shape
-    full_attention_mask = torch.ones(batch_size, seq_length, seq_length, device=input_ids.device)
-    full_attention_mask.tril_()
-    full_attention_mask = (full_attention_mask < 0.5).bool()
-    full_attention_mask.unsqueeze_(1)
-    return full_attention_mask
-def get_masks(input_ids, past_key_values, padding_mask=None):
-    batch_size, seq_length = input_ids.shape
-    full_attention_mask = torch.ones(batch_size, seq_length, seq_length, device=input_ids.device)
-    full_attention_mask.tril_()
-    past_length = 0
-    if past_key_values:
-        past_length = past_key_values[0][0].shape[0]
-    if past_length:
-        full_attention_mask = torch.cat((torch.ones(batch_size, seq_length,
-                                                    past_length,
-                                                    device=input_ids.device),
-                                         full_attention_mask), dim=-1)
-    if padding_mask is not None:
-        full_attention_mask = full_attention_mask * padding_mask.unsqueeze(1)
-    if not past_length and padding_mask is not None:
-        full_attention_mask -= padding_mask.unsqueeze(-1) - 1
-    full_attention_mask = (full_attention_mask < 0.5).bool()
-    full_attention_mask.unsqueeze_(1)
-    return full_attention_mask
-def get_position_ids(input_ids, device):
-    batch_size, seq_length = input_ids.shape
-    position_ids = torch.arange(seq_length, dtype=torch.long, device=device).unsqueeze(0).repeat(batch_size, 1)
-    return position_ids
-def get_position_ids_3(seq, bos_token_id):
-    context_length = len(seq)
-    position_ids = torch.arange(context_length, dtype=torch.long)
-    seq_length = seq.index(bos_token_id)
-    mask_position = seq_length - 1
-    position_ids[mask_position:] = mask_position
-    return position_ids
-def get_position_ids_4(seq, bos_token_id):
-    seq_length = len(seq)
-    position_ids = torch.arange(seq_length, dtype=torch.long).unsqueeze(0)
-    return position_ids
-
 
 if __name__ == '__main__':
 
@@ -343,20 +276,6 @@ if __name__ == '__main__':
     # input_ids = input_ids[:, 2:]
     # input_ids_s = input_ids[:, :]
     input_ids = torch.tensor([[1,2,3, 64790, 64792, 30910, 30939, 39701]])
-    mask_2 = get_masks_2(input_ids, past_key_values=None)
-    mask = get_masks(input_ids, past_key_values=None)
-    pos = get_position_ids(input_ids, device="cpu")
-    # pos_2 = get_position_ids_2(input_ids, bos_token_id=64790)
-    pos_3 = get_position_ids_3([1,2,3, 64790, 64792, 30910, 30939, 39701], bos_token_id=64790)
-    pos_4 = get_position_ids_4([1,2,3, 64790, 64792, 30910, 30939, 39701], bos_token_id=64790)
-    print(mask_2)
-    print(mask)
-    # print(pos_2)
-    print(pos)
-    print(pos_3)
-    print(pos_4)
-
-
 
     """
     64789 = {str} '[MASK]'

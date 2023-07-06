@@ -1,7 +1,7 @@
 # chatglm2-6b-sft
 chatglm2-6b, chatglm-6b微调/LORA/推理
 
-## 踩坑
+## 踩坑(截至20230705)
 ```python
 1. torch>=2.0, 否则微调会报很多错误(单纯推理可以用低版本);
 2. tokenizer.encode输出为 [gMASK, sop, 真实文本token]
@@ -16,7 +16,7 @@ chatglm2-6b, chatglm-6b微调/LORA/推理
 5. modeling_chatglm.py中的ChatGLMForConditionalGeneration类forward函数中的
       if full_attention_mask is None:  前加入  batch_size, seq_length = input_ids.shape
 6. get_mask(), 一直以来都对chatglm的mask/position有一些疑惑;
-    def get_masks(seq, bos_token_id):
+    def get_masks(seq, bos_token_id=sop):
         """  code from model_chatglm.py  """
         if seq.count(bos_token_id) == 2:
             context_length = seq[2:].index(bos_token_id) + 2
@@ -28,11 +28,21 @@ chatglm2-6b, chatglm-6b微调/LORA/推理
         # attention_mask.unsqueeze_(1)
         attention_mask = (attention_mask < 0.5).bool()
         return attention_mask
-7. 严格按照官方prompt构建输入输出:
+7. 严格按照官方prompt构建输入输出（"注意[Round 1]很重要, 不能删减"）:
     输入："[Round 1]\n\n问：{}\n\n答："
     输出："{}"
-    输入id: [gMASK, BOS, 输入tokens]
-    输出id: [gMASK, BOS, 输出tokens, EOS]
+    输入id: [gMASK, sop, 输入tokens, gMASK, sop]
+    输出id: [输出tokens, EOS]
+8. prompt、tokenizer测试（结论“[gMASK, sop]”很重要, 必须置于开头, 不能删减）
+   问题：1+1=
+   拼接：[gMASK, sop] + token_ids_0 #### 答案1: 1+1=2。
+   拼接：token_ids_0 + [gMASK, sop] #### 答案2.1: Hello! How can I assist you today?
+   拼接：token_ids_0 + [gMASK, sop] #### 答案2.2: 【问题】 【解答： 没有，tected，没有。 解答：protected，所以没有。
+   拼接：[gMASK, sop] + token_ids_0 + [gMASK, sop] #### 答案3.1: the sum of 1 and 1 is 2.
+   拼接：[gMASK, sop] + token_ids_0 + [gMASK, sop] #### 答案3.2: of course, 1+1=2
+   拼接：[gMASK, sop] + token_ids_0 + [gMASK, sop] #### 答案3.3: 1+1=2。
+   拼接：[gMASK, sop] + token_ids_0 + [BOS=1] #### 答案4.1: ""
+   拼接：第一轮剔除"[Round 1]"，[gMASK, sop] + token_ids_0 #### 答案5: a />
 ```
 
 ## 环境配置

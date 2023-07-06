@@ -30,9 +30,8 @@ os.environ["NUMEXPR_NUM_THREADS"] = CPU_NUMS  # export NUMEXPR_NUM_THREADS=1
 from peft import prepare_model_for_int8_training
 from peft import LoraConfig, get_peft_model
 from transformers import GenerationConfig
-from pydantic import BaseModel
-from rouge import Rouge  # pip install rouge
-from tqdm import tqdm
+# from rouge import Rouge  # pip install rouge
+# from tqdm import tqdm
 import torch
 
 from pydantic import BaseModel
@@ -165,15 +164,17 @@ def generate_prompt(data_point, is_logger=False):
     # end with gMASK, <sop>
     x = tokenizer.encode(text_1.replace(" ", ""))
     y = tokenizer.encode(text_2.replace(" ", ""))
+    if y and y[-1] == ID_gMASK:  # 如果以gMASK, <sop>开头则剔除(防止以后改了)
+        y = y[2:]
     if len(x) + len(y) > (MAX_LENGTH_Q + MAX_LENGTH_A):
         x = x[:MAX_LENGTH_Q]
         y = y[:MAX_LENGTH_A]
     if not x:
-        x = [ID_gMASK, ID_SOP, ID_PAD, ID_BOS]
-    if x[-1] != ID_BOS:
-        x += [ID_BOS]
+        y = [ID_PAD, ID_gMASK, ID_SOP]
+    if x[-1] != ID_SOP:
+        x += [ID_gMASK, ID_SOP]
     if not y:
-        y = [ID_gMASK, ID_SOP, ID_PAD, ID_EOS]
+        y = [ID_PAD, ID_EOS]
     if y and y[-1] != ID_EOS:
         y += [ID_EOS]
     out = {"input_ids": x, "labels": y}
