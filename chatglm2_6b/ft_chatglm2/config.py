@@ -11,7 +11,7 @@
 MICRO_BATCH_SIZE = 4  # default=4  # this could actually be 5 but i like powers of 2
 BATCH_SIZE = 128
 GRADIENT_ACCUMULATION_STEPS = BATCH_SIZE // MICRO_BATCH_SIZE
-LEARNING_RATE = 5e-5  # default=3e-4  # the Karpathy constant
+LEARNING_RATE = 3e-4  # default=3e-4  # the Karpathy constant
 EPOCHS = 3  # default=3  # we don't always need 3 tbh
 # LORA_DROPOUT = 0.1
 # LORA_ALPHA = 32

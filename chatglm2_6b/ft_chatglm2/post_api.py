@@ -83,7 +83,19 @@ def load_model_state(model, model_save_dir="./", model_name="adapter_model.bin",
         peft_config.inference_mode = True
         model = get_peft_model(model, peft_config)
         state_dict = torch.load(path_model, map_location=torch.device(device))
+        state_dict = {k.replace("_orig_mod.", "")
+                      .replace(".lora_A.weight", ".lora_A.default.weight")
+                      .replace(".lora_B.weight", ".lora_B.default.weight")
+                      : v for k, v in state_dict.items()}
         print(state_dict.keys())
+        print("#"*128)
+        ### 排查不存在model.keys的 state_dict.key
+        name_dict = {name: 0 for name, param in model.named_parameters()}
+        print(name_dict.keys())
+        print("#"*128)
+        for state_dict_key in state_dict.keys():
+            if state_dict_key not in name_dict:
+                print("{} is not exist!".format(state_dict_key))
         model.load_state_dict(state_dict, strict=False)
         # model.to(device)
         print("******model loaded success******")
@@ -158,13 +170,13 @@ def load_json(path: str, encoding: str="utf-8"):
     return model_json
 def generate_prompt(data_point, is_logger=False):
     # sorry about the formatting disaster gotta move fast
-    text_1 = f"[Round 1]\n\n问：{data_point.get('instruction', '')}{data_point.get('input', '')}\n\n答："
+    text_1 = f"[Round 1]\n\n问：{data_point.get('instruction', '')}\t{data_point.get('input', '')}\n\n答："
     # text_1 = f"问：{data_point.get('instruction', '')}{data_point.get('input', '')}\n\n答："
     text_2 = f"{data_point.get('output', '')}"
     # end with gMASK, <sop>
     x = tokenizer.encode(text_1)
     y = tokenizer.encode(text_2)
-    if y and y[-1] == ID_gMASK:  # 如果以gMASK, <sop>开头则剔除(防止以后改了)
+    if y and y[0] == ID_gMASK:  # 如果以gMASK, <sop>开头则剔除(防止以后改了)
         y = y[2:]
     if len(x) + len(y) > (MAX_LENGTH_Q + MAX_LENGTH_A):
         x = x[:MAX_LENGTH_Q]
@@ -218,7 +230,7 @@ model = prepare_model_for_half_training(model,
                           ],
         )
 if USE_CUDA:
-    model = model.cuda()
+    model = model.half().cuda()
 else:
     model = model.bfloat16()
 print_named_parameters(model, True)
@@ -332,4 +344,41 @@ if __name__ == '__main__':
 # |myz|
 
 可以在浏览器生成界面直接访问: http://localhost:8032/docs
+
+
+
+{'instruction': '', 'text': '类型#裙*颜色#蓝色*风格#清新*图案#蝴蝶结', 'penalty_alpha': 1.0, 'max_new_tokens': 128, 'temperature': 0.8, 'do_sample': True, 'num_beams': 1, 'top_p': 0.8, 'top_k': 50}
+tensor([[64790, 64792,   790, 30951,   517, 30910, 30939, 30996,    13,    13,
+         54761, 31211, 33467, 31010, 56778, 30998, 33692, 31010, 35798, 30998,
+         32799, 31010, 37785, 30998, 37505, 31010, 39424, 54784,    13,    13,
+         55437, 31211]])
+tensor([64790, 64792,   790, 30951,   517, 30910, 30939, 30996,    13,    13,
+        54761, 31211, 33467, 31010, 56778, 30998, 33692, 31010, 35798, 30998,
+        32799, 31010, 37785, 30998, 37505, 31010, 39424, 54784,    13,    13,
+        55437, 31211, 30910, 37785, 55325, 59585, 54530, 35798, 54712, 31123,
+        36350, 34317, 54530, 35642, 31123, 39424, 54784, 54530, 42128, 31123,
+        54772, 44936, 54664, 33804, 34317, 31155,     2])
+[Round 1]
+
+问：类型#裙*颜色#蓝色*风格#清新*图案#蝴蝶结
+
+答： 清新减讷的蓝色系，充满了浪漫的气息，蝴蝶结的点缀，让裙子更显得浪漫。
+
+
+{'instruction': '', 'text': '类型#裤*材质#羊毛', 'penalty_alpha': 1.0, 'max_new_tokens': 128, 'temperature': 0.95, 'do_sample': True, 'num_beams': 1, 'top_p': 0.7, 'top_k': 50}
+tensor([[64790, 64792,   790, 30951,   517, 30910, 30939, 30996,    13,    13,
+         54761, 31211, 33467, 31010, 56532, 30998, 38317, 31010, 55944, 55474,
+            13,    13, 55437, 31211]])
+tensor([64790, 64792,   790, 30951,   517, 30910, 30939, 30996,    13,    13,
+        54761, 31211, 33467, 31010, 56532, 30998, 38317, 31010, 55944, 55474,
+           13,    13, 55437, 31211, 30910, 33730, 33481, 47108, 44848, 55944,
+        55474, 56532, 31123, 32195, 55906, 55944, 55474, 46839, 31123, 35405,
+        21108, 33894, 31155,     2])
+[Round 1]
+
+问：类型#裤*材质#羊毛
+
+答： 这款时尚舒适的男士羊毛裤，采用纯羊毛面料，穿着 lbs舒适。
+
+
 """

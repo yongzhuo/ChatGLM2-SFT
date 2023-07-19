@@ -114,13 +114,13 @@ def generate_prompt(data_point, is_logger=False):
     text_2 = f"{data_point.get('output', '')}"
 
     # end with gMASK, <sop>
-    x = tokenizer.encode(text_1.replace(" ", ""))[:-1]
-    y = tokenizer.encode(text_2.replace(" ", ""))[:-2]
+    x = tokenizer.encode(text_1)[:-1]
+    y = tokenizer.encode(text_2)[:-2]
     if len(x) + len(y) > (MAX_LENGTH_Q + MAX_LENGTH_A):
         x = x[:MAX_LENGTH_Q]
         y = y[:MAX_LENGTH_A]
     if not x:
-        y = [ID_PAD, ID_BOS]
+        x = [ID_PAD, ID_BOS]
     if x[-1] != ID_BOS:
         x += [ID_BOS]
     if not y:
@@ -353,10 +353,10 @@ trainer = CustomTrainer(
             num_train_epochs=EPOCHS,
             max_grad_norm=1.0,
             logging_steps=20,
-            # warmup_steps=382,  # 618
-            warmup_ratio=0.01,
+            warmup_steps=382,  # 618
+            # warmup_ratio=0.01,
             evaluation_strategy="no",
-            lr_scheduler_type="cosine", #'constant',  # "cosine",
+            lr_scheduler_type="constant", #'constant',  # "cosine",
             logging_first_step=False,
             # evaluation_strategy="steps" if VAL_SET_SIZE > 0 else "no",
             # eval_steps=SAVE_STEPS if VAL_SET_SIZE > 0 else None,
@@ -366,7 +366,7 @@ trainer = CustomTrainer(
             # load_best_model_at_end=True if VAL_SET_SIZE > 0 else False,
             # ddp_find_unused_parameters=None,
             gradient_checkpointing=True,
-            group_by_length=True,  # group together samples of roughly the same length in training
+            # group_by_length=True,  # group together samples of roughly the same length in training
             output_dir=MODEL_SAVE_DIR,
             report_to=[],  # ["tensorboard"],  # [], ["wandb"]
             optim="adamw_torch",  # "adamw_hf",

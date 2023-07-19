@@ -70,7 +70,19 @@ def load_model_state(model, model_save_dir="./", model_name="adapter_model.bin",
         peft_config.inference_mode = True
         model = get_peft_model(model, peft_config)
         state_dict = torch.load(path_model, map_location=torch.device(device))
+        state_dict = {k.replace("_orig_mod.", "")
+                      .replace(".lora_A.weight", ".lora_A.default.weight")
+                      .replace(".lora_B.weight", ".lora_B.default.weight")
+                      : v for k, v in state_dict.items()}
         print(state_dict.keys())
+        print("#" * 128)
+        ### 排查不存在model.keys的 state_dict.key
+        name_dict = {name: 0 for name, param in model.named_parameters()}
+        print(name_dict.keys())
+        print("#" * 128)
+        for state_dict_key in state_dict.keys():
+            if state_dict_key not in name_dict:
+                print("{} is not exist!".format(state_dict_key))
         model.load_state_dict(state_dict, strict=False)
         # model.to(device)
         print("******model loaded success******")
@@ -145,13 +157,13 @@ def load_json(path: str, encoding: str="utf-8"):
     return model_json
 def generate_prompt(data_point, is_logger=False):
     # sorry about the formatting disaster gotta move fast
-    text_1 = f"[Round 1]\n\n问：{data_point.get('instruction', '')}{data_point.get('input', '')}\n\n答："
+    text_1 = f"[Round 1]\n\n问：{data_point.get('instruction', '')}\t{data_point.get('input', '')}\n\n答："
     # text_1 = f"问：{data_point.get('instruction', '')}{data_point.get('input', '')}\n\n答："
     text_2 = f"{data_point.get('output', '')}"
     # end with gMASK, <sop>
     x = tokenizer.encode(text_1)
     y = tokenizer.encode(text_2)
-    if y and y[-1] == ID_gMASK:  # 如果以gMASK, <sop>开头则剔除(防止以后改了)
+    if y and y[0] == ID_gMASK:  # 如果以gMASK, <sop>开头则剔除(防止以后改了)
         y = y[2:]
     if len(x) + len(y) > (MAX_LENGTH_Q + MAX_LENGTH_A):
         x = x[:MAX_LENGTH_Q]
@@ -205,7 +217,7 @@ model = prepare_model_for_half_training(model,
                           ],
         )
 if USE_CUDA:
-    model = model.cuda()
+    model = model.half().cuda()
 else:
     model = model.bfloat16()
 print_named_parameters(model, True)

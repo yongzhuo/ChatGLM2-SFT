@@ -130,14 +130,14 @@ def generate_prompt(data_point):
     text_1 = f"问：{data_point.get('instruction', '')}{data_point.get('input', '')}\n答：\n"
     text_2 = f"{data_point.get('output', '')}"
     # end with gMASK, <sop>
-    x = tokenizer.encode(text_1.replace(" ", ""))[:-1]
-    y = tokenizer.encode(text_2.replace(" ", ""))[:-2]
+    x = tokenizer.encode(text_1)[:-1]
+    y = tokenizer.encode(text_2)[:-2]
 
     if len(x) + len(y) > (MAX_LENGTH_Q + MAX_LENGTH_A):
         x = x[:MAX_LENGTH_Q]
         y = y[:MAX_LENGTH_A]
     if not x:
-        y = [ID_PAD, ID_BOS]
+        x = [ID_PAD, ID_BOS]
     if x[-1] != ID_BOS:
         x += [ID_BOS]
     if not y:
@@ -153,7 +153,7 @@ print("load ChatGLMForConditionalGeneration ok")
 model = load_model_state(model=model, model_save_dir=MODEL_SAVE_DIR)
 print("load peft ok")
 model = prepare_model_for_half_training(model,
-        use_gradient_checkpointing=True,
+        use_gradient_checkpointing=False,
         output_embedding_layer_name="lm_head",
         layer_norm_names=["post_attention_layernorm",
                           "input_layernorm",
@@ -161,7 +161,7 @@ model = prepare_model_for_half_training(model,
                           ],
         )
 if USE_CUDA:
-    model = model.cuda()
+    model = model.half().cuda()
 else:
     model = model.bfloat16()
 print_named_parameters(model, use_print_data=True)

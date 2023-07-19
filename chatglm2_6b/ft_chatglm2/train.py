@@ -21,7 +21,7 @@ os.environ["VECLIB_MAXIMUM_THREADS"] = CPU_NUMS  # export VECLIB_MAXIMUM_THREADS
 os.environ["NUMEXPR_NUM_THREADS"] = CPU_NUMS  # export NUMEXPR_NUM_THREADS=1
 
 from transformers.models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
-from peft import (prepare_model_for_int8_training, get_peft_model, LoraConfig)
+from peft import (get_peft_model_state_dict, get_peft_model, LoraConfig)
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.modeling_utils import unwrap_model
 from tensorboardX import SummaryWriter
@@ -118,7 +118,7 @@ def generate_prompt(data_point, is_logger=False):
     # end with gMASK, <sop>
     x = tokenizer.encode(text_1)
     y = tokenizer.encode(text_2)
-    if y and y[-1] == ID_gMASK:  # 如果以gMASK, <sop>开头则剔除(防止以后改了)
+    if y and y[0] == ID_gMASK:  # 如果以gMASK, <sop>开头则剔除(防止以后改了)
         y = y[2:]
     if len(x) + len(y) > (MAX_LENGTH_Q + MAX_LENGTH_A):
         x = x[:MAX_LENGTH_Q]
@@ -290,6 +290,7 @@ tensorboardx_witer = SummaryWriter(logdir=MODEL_SAVE_DIR)
 # ID_UNK = 0
 # ID_CLS = 1
 # ID_SEP = 2
+# ID_PAD = 2  #
 
 ### 包含训练集, 验证集. DATA_PATH_TRAIN, DATA_PATH_DEV
 # data_dev = load_dataset("json", data_files=DATA_PATH_DEV)
@@ -345,12 +346,13 @@ trainer = CustomTrainer(
             per_device_train_batch_size=MICRO_BATCH_SIZE,
             learning_rate=LEARNING_RATE,
             num_train_epochs=EPOCHS,
-            max_grad_norm=1.0,
+            max_grad_norm=0.5,
             logging_steps=20,
-            # warmup_steps=382,  # 618
-            warmup_ratio=0.01,
+            warmup_steps=382,  # 618
+            # warmup_ratio=0.01,
+            # warmup_steps=16,
             evaluation_strategy="no",
-            lr_scheduler_type="cosine", #'constant',  # "cosine",
+            lr_scheduler_type="constant", #'constant',  # "cosine",
             logging_first_step=False,
             # evaluation_strategy="steps" if VAL_SET_SIZE > 0 else "no",
             # eval_steps=SAVE_STEPS if VAL_SET_SIZE > 0 else None,
@@ -360,7 +362,7 @@ trainer = CustomTrainer(
             # load_best_model_at_end=True if VAL_SET_SIZE > 0 else False,
             # ddp_find_unused_parameters=None,
             gradient_checkpointing=True,
-            group_by_length=True,  # group together samples of roughly the same length in training
+            # group_by_length=True,  # group together samples of roughly the same length in training
             output_dir=MODEL_SAVE_DIR,
             optim="adamw_torch",  # "adamw_hf",
             report_to=[],  # ["tensorboard"],  # [], ["wandb"]
@@ -368,14 +370,19 @@ trainer = CustomTrainer(
         )
     )
 
-if torch.__version__ >= "2" and sys.platform != "win32":
-    model = torch.compile(model)
-
 
 files = dfs_file(MODEL_SAVE_DIR)
 files_name_str = str(files)
 flag_checkpoint = True if files and "checkpoint" in files_name_str else False
 trainer.train(resume_from_checkpoint=flag_checkpoint)
+old_state_dict = model.state_dict
+model.state_dict = (
+    lambda self, *_, **__: get_peft_model_state_dict(self, old_state_dict())
+).__get__(model, type(model))
+
+if torch.__version__ >= "2" and sys.platform != "win32":
+    model = torch.compile(model)
+
 save_model_state(model=model, config=config, model_save_dir=MODEL_SAVE_DIR)
 print_named_parameters(model, use_print_data=True)  # 查看LoRA层权重是不是为NAN溢出
 
